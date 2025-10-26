@@ -48,7 +48,7 @@ function init() {
     // === 4. GLB-MODELL LADEN ===
     const loader = new GLTFLoader(); // GLTFLoader ist jetzt ein importiertes Modul
     loader.load( 
-        'ersteProbeBlender.glb', 
+        'neuerHafen.glb', 
         function ( gltf ) {
             model = gltf.scene;
             // Positionierung anpassen, damit es im AR-Modus vor dem Nutzer erscheint
@@ -84,4 +84,5 @@ function render() {
     }
     
     renderer.render( scene, camera );
+
 }
