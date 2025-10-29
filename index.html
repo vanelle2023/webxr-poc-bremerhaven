@@ -5,13 +5,30 @@
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
+
+        /* Stil für die interaktive Info-Box */
+        #info-box {
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            padding: 15px; 
+            background-color: rgba(0, 0, 0, 0.7); 
+            color: white; 
+            font-family: sans-serif;
+            border-radius: 5px;
+            display: none; /* Am Anfang versteckt */
+            max-width: 300px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
-    <!-- 1. Three.js Basis-Bibliothek (Wird hier als Modul geladen) -->
+    <!-- Overlay für die Info-Box -->
+    <div id="info-box">
+        <div id="info-content"></div>
+    </div>
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js" } }</script>
     <script type="module" src="main.js"></script>
     
-    <!-- 2. Wichtige Module HINZUFÜGEN (direkt in main.js importiert) -->
 </body>
 </html>
