@@ -1,4 +1,3 @@
-// --- Importieren der notwendigen Module (Wichtig: Läuft nur über HTTP-Server) ---
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
 import { ARButton } from 'https://unpkg.com/three@0.158.0/examples/jsm/webxr/ARButton.js';
@@ -8,7 +7,6 @@ let camera, scene, renderer;
 let model; 
 
 init(); 
-// Die animate-Funktion wird nun über renderer.setAnimationLoop(render) in init() aufgerufen
 
 function init() {
     // === 1. BASIS-SZENE EINRICHTEN ===
@@ -17,32 +15,33 @@ function init() {
     // Hintergrundfarbe für den Nicht-AR-Modus
     scene.background = new THREE.Color(0x87ceeb); // Himmelblau
 
-    // --- BELEUCHTUNG FÜR GROSSE SZENEN ANPASSEN (WICHTIG FÜR BLENDERGIS-MODELLE) ---
+    // --- BELEUCHTUNG FÜR REALISMUS ANPASSEN ---
     
-    // 1. Hemisphere Light (Umgebungslicht, sehr hell für große Fläche)
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 10); // Intensität von 10
+    // 1. Hemisphere Light (Umgebungslicht)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 10); // Intensität 10 für Helligkeit
     scene.add(hemiLight);
 
     // 2. Directional Light (Simuliert Sonnenlicht)
     const dirLight = new THREE.DirectionalLight(0xffffff, 5); // Intensität 5
-    dirLight.position.set(50, 50, 50); // Licht kommt von weit oben rechts
+    dirLight.position.set(50, 50, 50); 
     scene.add(dirLight);
 
 
     // === 2. KAMERA & RENDERER EINRICHTEN ===
     
-    // ANPASSUNG: Sichtweite auf 5000 Meter für große BlenderGIS-Modelle
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000); 
+    // ANPASSUNG: Große maximale Sichtweite (1000m) für den Fall, dass das Modell doch groß ist.
+    // Die Kamera-Position wird dynamisch festgelegt.
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
     
-    // ANPASSUNG: Kamera weit zurücksetzen und anheben, um das große Modell zu sehen
-    camera.position.set(200, 200, 200); 
-    camera.lookAt(0, 0, 0); // Blickrichtung zum Zentrum der Szene
+    // Vorerst neutrale Position, die durch den Loader überschrieben wird
+    camera.position.set(50, 50, 50); 
+    camera.lookAt(0, 0, 0); 
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     
-    // NEU: Korrekte Eigenschaft für Farbraum
+    // Korrekte Eigenschaft für Farbraum
     renderer.outputColorSpace = THREE.SRGBColorSpace; 
 
 
@@ -53,19 +52,47 @@ function init() {
     document.body.appendChild( ARButton.createButton( renderer, { requiredFeatures: [ 'local-floor' ] } ) );
 
 
-    // === 4. GLB-MODELL LADEN ===
+    // === 4. GLB-MODELL LADEN & DYNAMISCH ANPASSEN ===
     const loader = new GLTFLoader(); 
     loader.load( 
-        'neuerHafen.glb', 
+        'schiff_stadt_koln.glb', 
         function ( gltf ) {
             model = gltf.scene;
             
-            // WICHTIG: Wenn das Modell in Blender um den Ursprung zentriert wurde,
-            // ist dies die Position. Wenn nicht, müssen Sie diese anpassen.
-            // Versuchen Sie zunächst eine kleine Skalierung, falls das Modell immer noch riesig ist (z.B. 1:100)
-            // model.scale.set(0.01, 0.01, 0.01); 
+            // --- DYNAMISCHE KAMERA-ANPASSUNG HIER ---
+            
+            // 1. BOUNDING BOX BERECHNEN
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());   
+            const center = box.getCenter(new THREE.Vector3()); 
+            
+            // 2. MODELL SKALIEREN (Skaliere die größte Dimension auf 5 Meter für AR-Präsentation)
+            const targetSize = 5; // z.B. 5 Meter
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scaleFactor = targetSize / maxDim;
+            model.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+            // Box/Größe nach der Skalierung neu berechnen
+            box.setFromObject(model);
+            size.copy(box.getSize(new THREE.Vector3()));
+            center.copy(box.getCenter(new THREE.Vector3()));
+            
+            // 3. KAMERA-POSITION BERECHNEN: Abstand basierend auf der größten Dimension des SKALIERTEN Modells
+            const maxComponent = Math.max(size.x, size.y, size.z);
+            const camDistance = maxComponent * 1.5; // 1.5x die größte Dimension
+
+            // 4. KAMERA VERSCHIEBEN & AUSRICHTEN (Desktop-Ansicht):
+            // Bewege die Kamera zum Zentrum des Modells (center.x, center.y) und füge den Abstand hinzu (center.z + dist)
+            camera.position.set(center.x, center.y + camDistance * 0.5, center.z + camDistance);
+            camera.lookAt(center);
+            
+            // 5. AR-MODUS POSITIONIERUNG: Setze das Modell auf den virtuellen Boden (y=0)
+            // Verschiebe das Modell so, dass sein unterer Rand bei Y=0 im Weltursprung liegt
+            // (center.y * scaleFactor) ist der Abstand vom Modell-Ursprung zum unteren Rand
+            model.position.set(-center.x, -center.y + (size.y / 2), -center.z); 
 
             scene.add( model );
+
         }, 
         undefined, 
         function ( error ) {
@@ -88,15 +115,10 @@ function onWindowResize() {
 }
 
 
-// === 5. RENDERING-SCHLEIFE ===
 function render() {
-    // Rotation nur im Desktop-Modus (nicht im AR-Modus, da es dort irritiert)
+    // Optionale: Rotation nur im Desktop-Modus
     if (model && !renderer.xr.isPresenting) {
-        // Optionale: Wenn das Modell geladen ist, kann man es drehen
-        // model.rotation.y += 0.005; 
-        
-        // HILFE: Wenn nichts sichtbar ist, ändern Sie die Rotation, 
-        // um zu sehen, ob das Modell am Rand des Bildschirms vorbeizieht!
+        // model.rotation.y += 0.005; // Aktivieren dies, wenn eine leichte Drehung gewünscht wird
     }
     
     renderer.render( scene, camera );
